@@ -2121,5 +2121,91 @@ document.querySelectorAll('.case-overlay-links a').forEach(link=>{
 })();
 </script>
 
+
+<script id="buttery-scroll-script">
+(function(){
+  const reducedMotion=window.matchMedia('(prefers-reduced-motion: reduce)');
+  const finePointer=window.matchMedia('(hover: hover) and (pointer: fine)');
+  if(reducedMotion.matches || !finePointer.matches)return;
+
+  const states=new WeakMap();
+  const scrollingRoot=document.scrollingElement || document.documentElement;
+  const clamp=(value,min,max)=>Math.min(Math.max(value,min),max);
+
+  function scrollLimit(scroller){
+    return Math.max(0,scroller.scrollHeight-scroller.clientHeight);
+  }
+
+  function canScroll(scroller,delta){
+    const limit=scrollLimit(scroller);
+    if(limit<=1)return false;
+    const position=scroller.scrollTop;
+    return delta<0 ? position>0 : position<limit;
+  }
+
+  function findScroller(target,delta){
+    let element=target instanceof Element ? target : target?.parentElement;
+    while(element && element!==document.body && element!==document.documentElement){
+      const style=getComputedStyle(element);
+      if(/auto|scroll/.test(style.overflowY) && canScroll(element,delta))return element;
+      element=element.parentElement;
+    }
+    const bodyOverflow=getComputedStyle(document.body).overflowY;
+    if(bodyOverflow==='hidden' || bodyOverflow==='clip')return null;
+    return canScroll(scrollingRoot,delta) ? scrollingRoot : null;
+  }
+
+  function setScroll(scroller,top){
+    if(scroller===scrollingRoot)window.scrollTo({top,behavior:'instant'});
+    else scroller.scrollTo({top,behavior:'instant'});
+  }
+
+  function getState(scroller){
+    let state=states.get(scroller);
+    if(!state){
+      state={current:scroller.scrollTop,target:scroller.scrollTop,frame:0};
+      states.set(scroller,state);
+    }
+    return state;
+  }
+
+  function animate(scroller,state){
+    state.current+=(state.target-state.current)*0.14;
+    if(Math.abs(state.target-state.current)<0.35){
+      state.current=state.target;
+      setScroll(scroller,state.target);
+      state.frame=0;
+      return;
+    }
+    setScroll(scroller,state.current);
+    state.frame=requestAnimationFrame(()=>animate(scroller,state));
+  }
+
+  window.addEventListener('wheel',event=>{
+    if(event.defaultPrevented || event.ctrlKey || event.metaKey || event.shiftKey)return;
+
+    let delta=event.deltaY;
+    if(event.deltaMode===1)delta*=16;
+    else if(event.deltaMode===2)delta*=window.innerHeight;
+    if(!delta)return;
+
+    const scroller=findScroller(event.target,delta);
+    if(!scroller)return;
+
+    event.preventDefault();
+    const state=getState(scroller);
+    const limit=scrollLimit(scroller);
+
+    if(!state.frame){
+      state.current=scroller.scrollTop;
+      state.target=scroller.scrollTop;
+    }
+
+    state.target=clamp(state.target+delta,0,limit);
+    if(!state.frame)state.frame=requestAnimationFrame(()=>animate(scroller,state));
+  },{passive:false});
+})();
+</script>
+
 </body>
 </html>
